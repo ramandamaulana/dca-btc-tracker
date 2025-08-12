@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DCA Bitcoin Tracker — USD/IDR</title>
+  <meta name="description" content="Simulasi DCA Bitcoin harian/mingguan/bulanan dalam USD atau IDR. Grafik nilai portofolio & harga BTC.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>₿</text></svg>">
+
+  <!-- Tailwind CSS & Dark mode -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+
+  <!-- Chart.js + Zoom plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+
+  <style>
+    html, body { background: #0b1220; }
+    .dark body { background: #0b1220; color: #e2e8f0; }
+    body { color: #0f172a; }
+
+    #statusBox { min-height: 1.25rem; width: 280px; }
+    .chip { padding: 0.25rem 0.75rem; font-size: 0.875rem; border: 1px solid rgb(203 213 225); border-radius: 9999px; }
+    .chip:hover { background: rgb(241 245 249); }
+    .dark .chip { border-color: rgb(51 65 85); }
+    .dark .chip:hover { background: rgb(30 41 59); }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.6); display: none; z-index: 50; }
+    .modal-overlay.show { display: block; }
+    .modal-panel { position: fixed; inset: 5% 10% auto 10%; bottom: 5%; background: white; color: #0f172a; border-radius: 0.75rem; box-shadow: 0 10px 30px rgba(0,0,0,0.25); z-index: 51; display: none; }
+    .modal-panel.show { display: flex; flex-direction: column; }
+    .dark .modal-panel { background: #0b1220; color: #e2e8f0; }
+    @media (max-width: 640px) { .modal-panel { inset: 0 !important; border-radius: 0; } }
+
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.9); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors">
+  <div class="max-w-7xl mx-auto px-4 py-8">
+    <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">DCA Bitcoin Tracker — USD/IDR</h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Simulasi DCA BTC harian/mingguan/bulanan dalam USD atau IDR.</p>
+      </div>
+      <div class="flex items-center flex-wrap gap-3">
+        <button id="themeBtn" aria-label="Toggle tema" title="Toggle tema" class="w-10 h-10 grid place-items-center border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700 text-xl"><span id="themeIcon">🌙</span></button>
+        <button id="exportCsvBtn" class="px-3 py-2 border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700 text-sm">Export CSV</button>
+      </div>
+    </header>
+
+    <!-- Controls -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 lg:col-span-2">
+        <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+          <h2 class="font-semibold">Pengaturan</h2>
+        </div>
+        <div class="p-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Jumlah per periode</label>
+              <div class="flex gap-2">
+                <input id="amountInput" type="number" min="1" step="1" value="100" class="w-full border rounded-lg px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700" />
+                <select id="amtCurrency" class="border rounded-lg px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700">
+                  <option value="USD">USD</option>
+                  <option value="IDR">IDR</option>
+                </select>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1"><span id="amountHint">$100.00</span> per pembelian</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Frekuensi</label>
+              <select id="freqSelect" class="w-full border rounded-lg px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700">
+                <option value="daily">Harian</option>
+                <option value="weekly">Mingguan</option>
+                <option value="monthly" selected>Bulanan</option>
+              </select>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Sesuaikan dengan kebiasaan investasimu.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Tanggal mulai</label>
+              <input id="startDate" type="date" value="2024-08-12" class="w-full border rounded-lg px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700" />
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Semakin lama periode, efek DCA makin terasa.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Tanggal akhir</label>
+              <input id="endDate" type="date" value="2025-08-12" class="w-full border rounded-lg px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700" />
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Biasanya pilih tanggal hari ini.</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-1">Tampilkan hasil dalam</label>
+              <select id="displayCurrency" class="w-full border rounded-lg px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700">
+                <option value="IDR" selected>IDR (Rupiah)</option>
+                <option value="USD">USD (Dollar)</option>
+              </select>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">P/L dan nilai portofolio akan ditampilkan dalam mata uang ini.</p>
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap gap-3 items-center">
+            <button id="runBtn" class="px-4 py-2 rounded-lg bg-black text-white hover:opacity-90 dark:bg-white dark:text-black">Jalankan simulasi</button>
+
+            <div id="statusBox" class="flex items-center gap-3">
+              <span id="errorBox" class="text-sm text-red-600"></span>
+              <span id="loading" class="text-sm text-slate-500 dark:text-slate-400 invisible">Menghitung...</span>
+            </div>
+          </div>
+
+          <!-- Presets & tips to fill space -->
+          <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm text-slate-500 dark:text-slate-400">Preset rentang:</span>
+                <button class="chip" data-preset="ytd">YTD</button>
+                <button class="chip" data-preset="1y">1Y</button>
+                <button class="chip" data-preset="3y">3Y</button>
+                <button class="chip" data-preset="5y">5Y</button>
+                <button class="chip" data-preset="all">All</button>
+              </div>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 text-xs text-slate-600 dark:text-slate-300">
+              <div class="font-semibold mb-1">Tips</div>
+              <ul class="list-disc list-inside space-y-1">
+                  <li>Ubah <em>Tampilkan hasil</em> ke IDR untuk melihat dampak kurs.</li>
+                <li>Coba preset <em>YTD / 1Y / 3Y / 5Y / All</em> buat bandingin horizon.</li>
+                <li>Ubah <em>Mata Uang input (USD/IDR)</em> untuk simulasi skenario berbeda.</li>
+              </ul>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4">
+        <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+            <h2 class="font-semibold">Kinerja Saat Ini</h2>
+          </div>
+          <div class="p-4 space-y-2 text-slate-600 dark:text-slate-300">
+            <div class="text-sm flex items-center justify-between"><span>Nilai portofolio</span><strong id="kpiValue">$0.00</strong></div>
+            <div class="text-sm flex items-center justify-between"><span>Total investasi</span><span id="kpiCost">$0.00</span></div>
+            <div class="text-sm flex items-center justify-between"><span>P/L</span><span id="kpiPnL" class="font-medium">$0.00 (0%)</span></div>
+            <div class="text-sm flex items-center justify-between"><span>BTC terkumpul</span><span id="kpiBTC">0 BTC</span></div>
+            <div class="text-xs flex items-center justify-between"><span class="text-slate-500 dark:text-slate-400">Harga BTC terakhir</span><span id="kpiLastPrice" class="text-slate-500 dark:text-slate-400">$0.00</span></div>
+          </div>
+        </div>
+
+        <!-- TRANSAKSI CARD (clickable to open modal) -->
+        <div id="transactionsCard" class="cursor-pointer bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h2 class="font-semibold">Transaksi DCA</h2>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">Klik untuk buka</span>
+              <button id="cardExportBtn" class="px-2 py-1 border rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700">Export CSV</button>
+            </div>
+          </div>
+          <div class="p-4">
+            <div class="max-h-72 overflow-auto border rounded-lg border-slate-200 dark:border-slate-700">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-slate-50 dark:bg-slate-800">
+                  <tr class="text-left">
+                    <th class="p-2">Tanggal</th>
+                    <th class="p-2">Harga (USD)</th>
+                    <th class="p-2">Dibelanjakan</th>
+                    <th class="p-2">BTC</th>
+                    <th class="p-2">Total Investasi</th>
+                    <th class="p-2">Nilai Portofolio</th>
+                  </tr>
+                </thead>
+                <tbody id="buysTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chart -->
+    <section class="mt-6 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+        <h2 class="font-semibold">Grafik Portofolio (DCA) & Harga BTC</h2>
+        <div class="flex items-center gap-2">
+          <button id="zoomInBtn" class="px-2 py-1 border rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700">＋</button>
+          <button id="zoomOutBtn" class="px-2 py-1 border rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700">－</button>
+          <button id="resetZoomBtn" class="px-2 py-1 border rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700">Reset Zoom</button>
+        </div>
+      </div>
+      <div class="p-4">
+        <div class="h-[460px]"><canvas id="portfolioChart" height="440"></canvas></div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">Harga: Binance (BTCUSDT 1D). Kurs USD/IDR: Frankfurter → Exchangerate.host (fallback).</p>
+      </div>
+    </section>
+
+    <footer class="mt-10 text-center text-xs text-slate-400">
+      <p>© 2025 — DCA Bitcoin Tracker</p>
+    </footer>
+  </div>
+
+  <!-- Modal -->
+  <div id="modalOverlay" class="modal-overlay"></div>
+  <div id="modalPanel" class="modal-panel">
+    <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+      <h3 class="font-semibold">Semua Transaksi DCA</h3>
+      <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+        <input id="filterInput" type="text" placeholder="Filter tanggal/harga..." class="px-3 py-2 text-sm rounded-lg border bg-white dark:bg-slate-900 dark:border-slate-700 w-full sm:w-64" />
+        <button id="modalExport" class="px-3 py-2 border rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700">Export CSV</button>
+        <button id="modalClose" class="px-3 py-2 border rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 dark:border-slate-700">Tutup</button>
+      </div>
+    </div>
+    <div class="p-0 grow flex flex-col">
+      <div class="grow overflow-auto">
+        <table class="w-full text-sm" id="fullTable">
+          <thead class="sticky top-0 bg-slate-50 dark:bg-slate-800">
+            <tr class="text-left select-none">
+              <th class="p-2 cursor-pointer" data-sort="date">Tanggal</th>
+              <th class="p-2 cursor-pointer" data-sort="priceUSD">Harga (USD)</th>
+              <th class="p-2 cursor-pointer" data-sort="usdSpent">Dibelanjakan (USD)</th>
+              <th class="p-2 cursor-pointer" data-sort="idrSpent">Dibelanjakan (IDR)</th>
+              <th class="p-2 cursor-pointer" data-sort="btcBought">BTC</th>
+              <th class="p-2 cursor-pointer" data-sort="cumCost">Total Investasi</th>
+              <th class="p-2 cursor-pointer" data-sort="cumValue">Nilai Portofolio</th>
+            </tr>
+          </thead>
+          <tbody id="buysTbodyFull"></tbody>
+        </table>
+      </div>
+      <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+        <div id="pageInfo">Page 1</div>
+        <div class="flex items-center gap-2">
+          <button id="firstPage" class="px-2 py-1 border rounded-lg">⏮</button>
+          <button id="prevPage" class="px-2 py-1 border rounded-lg">◀</button>
+          <button id="nextPage" class="px-2 py-1 border rounded-lg">▶</button>
+          <button id="lastPage" class="px-2 py-1 border rounded-lg">⏭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>
